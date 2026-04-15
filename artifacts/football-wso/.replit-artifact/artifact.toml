@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Winner Stays On"
+version = "1.0.0"
+id = "artifacts/football-wso"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 24052
+
+[services.development]
+run = "pnpm --filter @workspace/football-wso run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/football-wso", "run", "build" ]
+publicDir = "artifacts/football-wso/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24052"
+BASE_PATH = "/"
