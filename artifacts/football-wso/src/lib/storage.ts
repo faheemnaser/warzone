@@ -1,47 +1,46 @@
 import { Session } from "../types";
 
-const STORAGE_KEY = "wso_sessions";
-const ACTIVE_SESSION_KEY = "wso_active_session_id";
+const BASE = "/api";
 
-export function loadSessions(): Session[] {
+export async function loadSessions(): Promise<Session[]> {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    return JSON.parse(raw) as Session[];
+    const res = await fetch(`${BASE}/sessions`);
+    if (!res.ok) return [];
+    return res.json();
   } catch {
     return [];
   }
 }
 
-export function saveSession(session: Session): void {
-  const sessions = loadSessions();
-  const idx = sessions.findIndex((s) => s.id === session.id);
-  if (idx >= 0) {
-    sessions[idx] = session;
-  } else {
-    sessions.push(session);
+export async function createSession(session: Session): Promise<Session> {
+  const res = await fetch(`${BASE}/sessions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(session),
+  });
+  if (!res.ok) throw new Error("Failed to create session");
+  return res.json();
+}
+
+export async function saveSession(session: Session): Promise<void> {
+  const res = await fetch(`${BASE}/sessions/${session.id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(session),
+  });
+  if (!res.ok) throw new Error("Failed to save session");
+}
+
+export async function getSession(id: string): Promise<Session | null> {
+  try {
+    const res = await fetch(`${BASE}/sessions/${id}`);
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
   }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
 }
 
-export function getSession(id: string): Session | null {
-  const sessions = loadSessions();
-  return sessions.find((s) => s.id === id) ?? null;
-}
-
-export function setActiveSessionId(id: string | null): void {
-  if (id === null) {
-    localStorage.removeItem(ACTIVE_SESSION_KEY);
-  } else {
-    localStorage.setItem(ACTIVE_SESSION_KEY, id);
-  }
-}
-
-export function getActiveSessionId(): string | null {
-  return localStorage.getItem(ACTIVE_SESSION_KEY);
-}
-
-export function deleteSession(id: string): void {
-  const sessions = loadSessions().filter((s) => s.id !== id);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
+export async function deleteSession(id: string): Promise<void> {
+  await fetch(`${BASE}/sessions/${id}`, { method: "DELETE" });
 }

@@ -6,30 +6,17 @@ import {
   TEAM_NAMES,
   computeCurrentFromHistory,
   computeStatsFromHistory,
-  computeNextMatchup,
   recomputeAllMatchesFromHistory,
 } from "../lib/gameLogic";
 import { generateId, formatTime } from "../lib/utils";
 import { cn } from "../lib/utils";
 
-const TIMER_DURATION = 7 * 60; // 7 minutes in seconds
+const TIMER_DURATION = 7 * 60;
 
 const TEAM_WIN_BTN: Record<TeamId, string> = {
   white: "bg-white text-gray-900 border-2 border-gray-200 active:bg-gray-100",
   black: "bg-gray-900 text-white border-2 border-gray-600 active:bg-gray-800",
   rainbow: "bg-gradient-to-r from-violet-500 via-fuchsia-500 to-orange-400 text-white border-2 border-violet-400 active:opacity-90",
-};
-
-const TEAM_BADGE: Record<TeamId, string> = {
-  white: "bg-white text-gray-900",
-  black: "bg-gray-800 text-white",
-  rainbow: "bg-gradient-to-r from-violet-500 to-orange-400 text-white",
-};
-
-const TEAM_STAT_ACCENT: Record<TeamId, string> = {
-  white: "text-white",
-  black: "text-gray-300",
-  rainbow: "text-violet-300",
 };
 
 interface HistoryItemProps {
@@ -41,17 +28,27 @@ interface HistoryItemProps {
 function HistoryItem({ match, onEdit, onDelete }: HistoryItemProps) {
   const [editing, setEditing] = useState(false);
 
-  const resultLabel = match.result === "team1"
-    ? `${TEAM_NAMES[match.team1]} Win`
-    : match.result === "team2"
-    ? `${TEAM_NAMES[match.team2]} Win`
-    : "Draw";
+  const resultLabel =
+    match.result === "team1"
+      ? `${TEAM_NAMES[match.team1]} Win`
+      : match.result === "team2"
+      ? `${TEAM_NAMES[match.team2]} Win`
+      : "Draw";
 
-  const resultColor = match.result === "draw"
-    ? "text-yellow-400"
-    : match.result === "team1"
-    ? match.team1 === "rainbow" ? "text-violet-400" : match.team1 === "white" ? "text-gray-200" : "text-gray-400"
-    : match.team2 === "rainbow" ? "text-violet-400" : match.team2 === "white" ? "text-gray-200" : "text-gray-400";
+  const resultColor =
+    match.result === "draw"
+      ? "text-yellow-400"
+      : match.result === "team1"
+      ? match.team1 === "rainbow"
+        ? "text-violet-400"
+        : match.team1 === "white"
+        ? "text-gray-200"
+        : "text-gray-400"
+      : match.team2 === "rainbow"
+      ? "text-violet-400"
+      : match.team2 === "white"
+      ? "text-gray-200"
+      : "text-gray-400";
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-xl p-3.5">
@@ -115,13 +112,30 @@ export default function LiveMatch() {
   const [showHistory, setShowHistory] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioRef = useRef<AudioContext | null>(null);
+  const savingRef = useRef(false);
+
+  // Load session from API
+  async function loadSession() {
+    if (!params.id || savingRef.current) return;
+    const s = await getSession(params.id);
+    if (s) setSession(s);
+  }
 
   useEffect(() => {
-    if (params.id) {
-      const s = getSession(params.id);
-      setSession(s);
-    }
+    loadSession();
+  }, [params.id]);
+
+  // Polling for real-time sync (3s interval)
+  useEffect(() => {
+    if (!params.id) return;
+    pollRef.current = setInterval(() => {
+      loadSession();
+    }, 3000);
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
   }, [params.id]);
 
   const playAlert = useCallback(() => {
@@ -174,23 +188,29 @@ export default function LiveMatch() {
     setTimeLeft(TIMER_DURATION);
   }
 
-  function recordResult(result: MatchResult) {
+  async function persistSession(updated: Session) {
+    savingRef.current = true;
+    setSession(updated);
+    try {
+      await saveSession(updated);
+    } finally {
+      savingRef.current = false;
+    }
+  }
+
+  async function recordResult(result: MatchResult) {
     if (!session || !session.startingTeam1 || !session.startingTeam2) return;
 
     const completedMatches = session.matches.filter((m) => m.result !== null);
     const current = computeCurrentFromHistory(completedMatches, session.startingTeam1, session.startingTeam2);
-
-    // Update the current pending match or create a completed one
     const pendingMatch = session.matches.find((m) => m.result === null);
 
     let updatedMatches: Match[];
     if (pendingMatch) {
-      // Fill in result for pending match
       updatedMatches = session.matches.map((m) =>
         m.id === pendingMatch.id ? { ...m, result } : m
       );
     } else {
-      // Shouldn't happen, but just in case
       const newMatch: Match = {
         id: generateId(),
         matchNumber: current.matchNumber,
@@ -203,7 +223,6 @@ export default function LiveMatch() {
       updatedMatches = [...session.matches, newMatch];
     }
 
-    // Add next pending match
     const lastCompleted = updatedMatches.filter((m) => m.result !== null);
     const nextCurrentMatch = computeCurrentFromHistory(lastCompleted, session.startingTeam1, session.startingTeam2);
 
@@ -219,28 +238,27 @@ export default function LiveMatch() {
 
     const finalMatches = [...updatedMatches, nextPending];
     const updated: Session = { ...session, matches: finalMatches };
-    saveSession(updated);
-    setSession(updated);
+    await persistSession(updated);
     resetTimer();
 
-    const winner = result === "team1" ? TEAM_NAMES[nextCurrentMatch.team1] : result === "team2" ? "" : null;
-    setFlash(result === "draw" ? "Draw!" : `${result === "team1" ? TEAM_NAMES[lastCompleted[lastCompleted.length - 1]?.team1 || "white"] : TEAM_NAMES[lastCompleted[lastCompleted.length - 1]?.team2 || "black"]} Wins!`);
+    const winningTeam = result === "team1"
+      ? lastCompleted[lastCompleted.length - 1]?.team1
+      : result === "team2"
+      ? lastCompleted[lastCompleted.length - 1]?.team2
+      : null;
+    setFlash(result === "draw" ? "Draw!" : `${TEAM_NAMES[(winningTeam ?? "white") as TeamId]} Wins!`);
     setTimeout(() => setFlash(null), 2000);
   }
 
-  function handleEditResult(matchId: string, newResult: MatchResult) {
+  async function handleEditResult(matchId: string, newResult: MatchResult) {
     if (!session || !session.startingTeam1 || !session.startingTeam2) return;
-    // Update just the result of that match
     const withNewResult = session.matches.map((m) =>
       m.id === matchId ? { ...m, result: newResult } : m
     );
-    // Recompute all match positions from the beginning (excluding pending)
     const completedOnly = withNewResult.filter((m) => m.result !== null);
     const recomputed = recomputeAllMatchesFromHistory(completedOnly, session.startingTeam1, session.startingTeam2);
 
-    // Recompute pending match
-    const lastCompleted = recomputed;
-    const nextCurrent = computeCurrentFromHistory(lastCompleted, session.startingTeam1, session.startingTeam2);
+    const nextCurrent = computeCurrentFromHistory(recomputed, session.startingTeam1, session.startingTeam2);
     const pendingMatch: Match = {
       id: generateId(),
       matchNumber: nextCurrent.matchNumber,
@@ -253,11 +271,10 @@ export default function LiveMatch() {
 
     const finalMatches = [...recomputed, pendingMatch];
     const updated: Session = { ...session, matches: finalMatches };
-    saveSession(updated);
-    setSession(updated);
+    await persistSession(updated);
   }
 
-  function handleDeleteMatch(matchId: string) {
+  async function handleDeleteMatch(matchId: string) {
     if (!session || !session.startingTeam1 || !session.startingTeam2) return;
     const withoutDeleted = session.matches.filter((m) => m.id !== matchId && m.result !== null);
     const recomputed = recomputeAllMatchesFromHistory(withoutDeleted, session.startingTeam1, session.startingTeam2);
@@ -275,24 +292,31 @@ export default function LiveMatch() {
 
     const finalMatches = [...recomputed, pendingMatch];
     const updated: Session = { ...session, matches: finalMatches };
-    saveSession(updated);
-    setSession(updated);
+    await persistSession(updated);
   }
 
-  function handleEndSession() {
+  async function handleEndSession() {
     if (!session) return;
     const updated: Session = { ...session, endedAt: new Date().toISOString() };
-    saveSession(updated);
+    await persistSession(updated);
     setLocation(`/summary/${session.id}`);
   }
 
-  if (!session || !session.startingTeam1 || !session.startingTeam2) return null;
+  if (!session) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+        <p className="text-gray-600 text-sm">Loading...</p>
+      </div>
+    );
+  }
+
+  if (!session.startingTeam1 || !session.startingTeam2) return null;
 
   const completedMatches = session.matches.filter((m) => m.result !== null);
   const currentState = computeCurrentFromHistory(completedMatches, session.startingTeam1, session.startingTeam2);
   const stats = computeStatsFromHistory(completedMatches);
 
-  const { team1, team2, restingTeam, cameFromRestTeam, matchNumber } = currentState;
+  const { team1, team2, restingTeam, matchNumber } = currentState;
   const timerPercent = (timeLeft / TIMER_DURATION) * 100;
   const timerColor = timeLeft <= 30 ? "text-red-400" : timeLeft <= 60 ? "text-yellow-400" : "text-white";
   const timerBg = timeLeft <= 30 ? "#ef4444" : timeLeft <= 60 ? "#eab308" : "#ffffff";
@@ -304,7 +328,7 @@ export default function LiveMatch() {
       {/* Flash overlay */}
       {flash && (
         <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
-          <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-3xl px-10 py-6 text-center animate-[fadeInScale_0.2s_ease-out]">
+          <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-3xl px-10 py-6 text-center">
             <p className="text-3xl font-black text-white">{flash}</p>
           </div>
         </div>
@@ -313,9 +337,17 @@ export default function LiveMatch() {
       <div className="max-w-lg mx-auto px-4 pt-6 pb-24">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <div>
-            <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider">{session.name}</p>
-            <p className="text-xs text-gray-600">Match #{matchNumber}</p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setLocation("/")}
+              className="text-gray-600 hover:text-gray-300 text-sm transition-colors"
+            >
+              ←
+            </button>
+            <div>
+              <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider">{session.name}</p>
+              <p className="text-xs text-gray-600">Match #{matchNumber}</p>
+            </div>
           </div>
           <button
             onClick={handleEndSession}
@@ -365,9 +397,7 @@ export default function LiveMatch() {
               <span className="text-gray-600">💤</span>
               <span className="text-sm text-gray-400">Resting: <span className="text-gray-200 font-semibold">{TEAM_NAMES[restingTeam]}</span></span>
             </div>
-            <div className="flex items-center gap-1">
-              <span className="text-xs text-green-400 font-semibold">⬆️ Next up</span>
-            </div>
+            <span className="text-xs text-green-400 font-semibold">⬆️ Next up</span>
           </div>
         </div>
 
@@ -375,15 +405,11 @@ export default function LiveMatch() {
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-5">
           <div className="flex items-center justify-between mb-4">
             <p className="text-xs font-semibold tracking-wider text-gray-500 uppercase">Timer</p>
-            <button
-              onClick={resetTimer}
-              className="text-xs text-gray-600 hover:text-gray-400 transition-colors"
-            >
+            <button onClick={resetTimer} className="text-xs text-gray-600 hover:text-gray-400 transition-colors">
               Reset
             </button>
           </div>
 
-          {/* Timer progress arc */}
           <div className="flex items-center justify-center mb-4">
             <div className="relative w-32 h-32">
               <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
@@ -429,19 +455,13 @@ export default function LiveMatch() {
           <p className="text-xs font-semibold tracking-wider text-gray-500 uppercase">Record Result</p>
           <button
             onClick={() => recordResult("team1")}
-            className={cn(
-              "w-full rounded-2xl py-5 font-black text-xl active:scale-[0.97] transition-all shadow-lg",
-              TEAM_WIN_BTN[team1]
-            )}
+            className={cn("w-full rounded-2xl py-5 font-black text-xl active:scale-[0.97] transition-all shadow-lg", TEAM_WIN_BTN[team1])}
           >
             {TEAM_NAMES[team1]} Wins
           </button>
           <button
             onClick={() => recordResult("team2")}
-            className={cn(
-              "w-full rounded-2xl py-5 font-black text-xl active:scale-[0.97] transition-all shadow-lg",
-              TEAM_WIN_BTN[team2]
-            )}
+            className={cn("w-full rounded-2xl py-5 font-black text-xl active:scale-[0.97] transition-all shadow-lg", TEAM_WIN_BTN[team2])}
           >
             {TEAM_NAMES[team2]} Wins
           </button>

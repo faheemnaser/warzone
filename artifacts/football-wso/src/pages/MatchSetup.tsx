@@ -24,19 +24,26 @@ export default function MatchSetup() {
   const [session, setSession] = useState<Session | null>(null);
   const [team1, setTeam1] = useState<TeamId | null>(null);
   const [team2, setTeam2] = useState<TeamId | null>(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (params.id) {
-      const s = getSession(params.id);
+    if (!params.id) return;
+    getSession(params.id).then((s) => {
       setSession(s);
       if (s?.startingTeam1 && s?.startingTeam2) {
         setTeam1(s.startingTeam1);
         setTeam2(s.startingTeam2);
       }
-    }
+    });
   }, [params.id]);
 
-  if (!session) return null;
+  if (!session) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+        <p className="text-gray-600 text-sm">Loading...</p>
+      </div>
+    );
+  }
 
   const restingTeam = team1 && team2 ? getThirdTeam(team1, team2) : null;
 
@@ -56,27 +63,32 @@ export default function MatchSetup() {
     setTeam2(t);
   }
 
-  function handleStart() {
-    if (!team1 || !team2 || !session) return;
-    const resting = getThirdTeam(team1, team2);
-    const updated: Session = {
-      ...session,
-      startingTeam1: team1,
-      startingTeam2: team2,
-      matches: [
-        {
-          id: generateId(),
-          matchNumber: 1,
-          team1,
-          team2,
-          restingTeam: resting,
-          result: null,
-          cameFromRestTeam: resting,
-        },
-      ],
-    };
-    saveSession(updated);
-    setLocation(`/live/${session.id}`);
+  async function handleStart() {
+    if (!team1 || !team2 || !session || saving) return;
+    setSaving(true);
+    try {
+      const resting = getThirdTeam(team1, team2);
+      const updated: Session = {
+        ...session,
+        startingTeam1: team1,
+        startingTeam2: team2,
+        matches: [
+          {
+            id: generateId(),
+            matchNumber: 1,
+            team1,
+            team2,
+            restingTeam: resting,
+            result: null,
+            cameFromRestTeam: resting,
+          },
+        ],
+      };
+      await saveSession(updated);
+      setLocation(`/live/${session.id}`);
+    } catch {
+      setSaving(false);
+    }
   }
 
   return (
@@ -84,7 +96,7 @@ export default function MatchSetup() {
       <div className="max-w-lg mx-auto px-4 pt-10 pb-24">
         {/* Header */}
         <button onClick={() => setLocation("/")} className="text-gray-500 text-sm mb-6 flex items-center gap-1 hover:text-gray-300 transition-colors">
-          ← Back
+          ← Sessions
         </button>
 
         <div className="mb-8">
@@ -160,10 +172,10 @@ export default function MatchSetup() {
         {/* Start Button */}
         <button
           onClick={handleStart}
-          disabled={!team1 || !team2}
+          disabled={!team1 || !team2 || saving}
           className="w-full bg-white text-gray-900 font-bold text-lg rounded-2xl py-5 hover:bg-gray-100 active:scale-[0.98] transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-lg"
         >
-          Start Match
+          {saving ? "Starting..." : "Start Match"}
         </button>
       </div>
     </div>

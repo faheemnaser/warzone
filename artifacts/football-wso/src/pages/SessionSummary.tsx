@@ -17,13 +17,17 @@ export default function SessionSummary() {
   const [session, setSession] = useState<Session | null>(null);
 
   useEffect(() => {
-    if (params.id) {
-      const s = getSession(params.id);
-      setSession(s);
-    }
+    if (!params.id) return;
+    getSession(params.id).then((s) => setSession(s));
   }, [params.id]);
 
-  if (!session) return null;
+  if (!session) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+        <p className="text-gray-600 text-sm">Loading...</p>
+      </div>
+    );
+  }
 
   const completedMatches = session.matches.filter((m) => m.result !== null);
   const stats = computeStatsFromHistory(completedMatches);
@@ -125,7 +129,7 @@ export default function SessionSummary() {
             onClick={() => setLocation("/")}
             className="w-full bg-white text-gray-900 font-bold text-lg rounded-2xl py-5 hover:bg-gray-100 active:scale-[0.98] transition-all shadow-lg"
           >
-            New Session
+            All Sessions
           </button>
           <button
             onClick={() => setLocation(`/live/${session.id}`)}

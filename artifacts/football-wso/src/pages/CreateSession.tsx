@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { Session, Player, TeamId } from "../types";
 import { generateId } from "../lib/utils";
-import { saveSession, setActiveSessionId } from "../lib/storage";
+import { createSession } from "../lib/storage";
 import { TEAM_NAMES } from "../lib/gameLogic";
 import { cn } from "../lib/utils";
 
@@ -33,9 +33,7 @@ export default function CreateSession() {
   const [duration, setDuration] = useState("");
   const [playerInput, setPlayerInput] = useState("");
   const [players, setPlayers] = useState<Player[]>([]);
-  const [assignTarget, setAssignTarget] = useState<TeamId | null>(null);
-
-  const unassigned = players.filter((p) => !p.teamId);
+  const [saving, setSaving] = useState(false);
 
   function addPlayer() {
     const trimmed = playerInput.trim();
@@ -52,23 +50,27 @@ export default function CreateSession() {
     setPlayers((prev) => prev.filter((p) => p.id !== playerId));
   }
 
-  function handleStart() {
-    if (!name.trim()) return;
-    const session: Session = {
-      id: generateId(),
-      name: name.trim(),
-      location: location.trim(),
-      duration: duration.trim(),
-      players,
-      matches: [],
-      startingTeam1: null,
-      startingTeam2: null,
-      startedAt: new Date().toISOString(),
-      endedAt: null,
-    };
-    saveSession(session);
-    setActiveSessionId(session.id);
-    setLocation(`/match-setup/${session.id}`);
+  async function handleStart() {
+    if (!name.trim() || saving) return;
+    setSaving(true);
+    try {
+      const session: Session = {
+        id: generateId(),
+        name: name.trim(),
+        location: location.trim(),
+        duration: duration.trim(),
+        players,
+        matches: [],
+        startingTeam1: null,
+        startingTeam2: null,
+        startedAt: new Date().toISOString(),
+        endedAt: null,
+      };
+      await createSession(session);
+      setLocation(`/match-setup/${session.id}`);
+    } catch {
+      setSaving(false);
+    }
   }
 
   return (
@@ -76,6 +78,12 @@ export default function CreateSession() {
       <div className="max-w-lg mx-auto px-4 pt-10 pb-24">
         {/* Header */}
         <div className="mb-8">
+          <button
+            onClick={() => setLocation("/")}
+            className="text-gray-500 text-sm mb-4 flex items-center gap-1 hover:text-gray-300 transition-colors"
+          >
+            ← Sessions
+          </button>
           <div className="flex items-center gap-2 mb-1">
             <span className="text-2xl">⚽</span>
             <span className="text-xs font-semibold tracking-widest text-gray-500 uppercase">Winner Stays On</span>
@@ -210,10 +218,10 @@ export default function CreateSession() {
         {/* Start Button */}
         <button
           onClick={handleStart}
-          disabled={!name.trim()}
+          disabled={!name.trim() || saving}
           className="w-full bg-white text-gray-900 font-bold text-lg rounded-2xl py-5 hover:bg-gray-100 active:scale-[0.98] transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-lg"
         >
-          Start Session
+          {saving ? "Creating..." : "Start Session"}
         </button>
       </div>
     </div>

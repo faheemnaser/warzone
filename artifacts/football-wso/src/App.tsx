@@ -1,4 +1,5 @@
 import { Switch, Route, Router as WouterRouter } from "wouter";
+import SessionsHub from "@/pages/SessionsHub";
 import CreateSession from "@/pages/CreateSession";
 import MatchSetup from "@/pages/MatchSetup";
 import LiveMatch from "@/pages/LiveMatch";
@@ -8,7 +9,8 @@ import NotFound from "@/pages/not-found";
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={CreateSession} />
+      <Route path="/" component={SessionsHub} />
+      <Route path="/create" component={CreateSession} />
       <Route path="/match-setup/:id" component={MatchSetup} />
       <Route path="/live/:id" component={LiveMatch} />
       <Route path="/summary/:id" component={SessionSummary} />
