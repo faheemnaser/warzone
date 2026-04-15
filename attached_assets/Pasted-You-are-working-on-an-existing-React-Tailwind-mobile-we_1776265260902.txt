@@ -1,0 +1,203 @@
+You are working on an existing React + Tailwind mobile web app for managing 3-team football sessions (White, Black, Rainbow).
+
+IMPORTANT:
+
+* DO NOT rewrite or replace existing game logic (rotation, draw rules, streaks, wins, timer logic already exist and are correct)
+* DO NOT redesign the UI
+* ONLY add persistence + sessions hub + routing + realtime sync
+
+---
+
+## 🧠 GOAL OF THIS UPGRADE
+
+Turn the current single-session app into a multi-session cloud app where:
+
+* Sessions persist across refresh
+* Multiple users can join via link
+* Data is shared in real time
+* Existing match logic remains untouched
+
+---
+
+## ⚙️ TECH ADDITION
+
+Add Supabase only for:
+
+* storing sessions
+* storing matches
+* syncing updates between users
+
+DO NOT change core game engine logic.
+
+---
+
+## 🧱 DATABASE (Supabase)
+
+Create tables:
+
+### sessions
+
+* id (uuid, primary key)
+* name (text)
+* status ("live" | "completed")
+* created_at
+
+---
+
+### matches
+
+* id (uuid)
+* session_id (uuid foreign key)
+* team1 (text)
+* team2 (text)
+* result ("team1" | "team2" | "draw")
+* match_number (int)
+* created_at
+
+---
+
+## 🏠 NEW FEATURE: SESSIONS HUB PAGE
+
+Create a new home route "/"
+
+This page must:
+
+* Fetch all sessions from Supabase
+* Show:
+
+  * 🟢 Live sessions (status = live)
+  * ⚫ Completed sessions (status = completed)
+
+Each session card:
+
+* Name
+* Status badge
+* Click → opens "/session/:id"
+
+Add button:
+
+* “Create New Session”
+
+---
+
+## ➕ CREATE SESSION FLOW
+
+When creating a session:
+
+* Save session to Supabase
+* Redirect to "/session/:id"
+
+DO NOT change existing team creation logic
+
+---
+
+## 🎮 SESSION PAGE (MODIFICATION ONLY)
+
+Wrap existing session screen into route:
+
+"/session/:id"
+
+On load:
+
+* Fetch session by id
+* Fetch matches for session from Supabase
+* Use EXISTING logic to rebuild:
+
+  * wins
+  * streaks
+  * current match state
+  * resting team
+
+IMPORTANT:
+
+* Your existing logic remains unchanged
+* Just feed it data from Supabase instead of local state
+
+---
+
+## 🧾 MATCH STORAGE CHANGE (MINIMAL CHANGE)
+
+Wherever a match result is currently handled:
+
+OLD FLOW (DO NOT REMOVE LOGIC):
+
+* Update local state
+* Update rotation logic
+* Update streaks
+
+NEW ADDITION:
+
+* ALSO insert match into Supabase:
+
+{
+session_id,
+team1,
+team2,
+result,
+match_number
+}
+
+DO NOT move or refactor game logic.
+
+---
+
+## 🔄 REALTIME SYNC (LIGHTWEIGHT)
+
+Add Supabase realtime subscription:
+
+* Subscribe to "matches" table where session_id = current session
+
+On change:
+
+* Re-fetch matches
+* Re-run existing rebuild logic
+* Re-render UI
+
+IMPORTANT:
+
+* Do not merge states manually
+* Always derive state from matches list
+
+---
+
+## 🔗 ROUTING
+
+Add routing:
+
+* "/" → sessions hub (new)
+* "/session/:id" → existing game screen wrapped
+
+---
+
+## 🏁 END SESSION
+
+Add simple update:
+
+* Set session.status = "completed"
+
+No other changes required.
+
+---
+
+## 🚫 STRICT RULES
+
+* DO NOT rewrite rotation logic
+* DO NOT rewrite draw logic
+* DO NOT change UI layout of live game screen
+* DO NOT introduce new game mechanics
+* DO NOT add authentication
+* DO NOT over-engineer state management
+
+---
+
+## 🎯 SUCCESS CRITERIA
+
+After this upgrade:
+
+* Refresh does NOT lose data
+* Multiple users can control same session
+* Sessions appear on home page
+* Existing gameplay feels identical
+* Only persistence + syncing improved
+
+Focus only on wiring, not redesign.
