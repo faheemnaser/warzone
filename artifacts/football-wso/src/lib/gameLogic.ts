@@ -42,9 +42,9 @@ export function deriveStateFromMatches(
   nextMatchNumber: number
 ): DerivedState {
   const stats: Record<TeamId, TeamStats> = {
-    white: { wins: 0, currentStreak: 0, longestStreak: 0 },
-    black: { wins: 0, currentStreak: 0, longestStreak: 0 },
-    rainbow: { wins: 0, currentStreak: 0, longestStreak: 0 },
+    white: { wins: 0, currentStreak: 0, longestStreak: 0, points: 0 },
+    black: { wins: 0, currentStreak: 0, longestStreak: 0, points: 0 },
+    rainbow: { wins: 0, currentStreak: 0, longestStreak: 0, points: 0 },
   };
 
   for (const match of completedMatches) {
@@ -54,13 +54,16 @@ export function deriveStateFromMatches(
 
     if (winnerTeam) {
       stats[winnerTeam].wins += 1;
+      stats[winnerTeam].points += 3;
       stats[winnerTeam].currentStreak += 1;
       if (stats[winnerTeam].currentStreak > stats[winnerTeam].longestStreak) {
         stats[winnerTeam].longestStreak = stats[winnerTeam].currentStreak;
       }
       if (loserTeam) stats[loserTeam].currentStreak = 0;
     } else {
-      // Draw: team that came from rest stays, other goes to rest
+      // Draw: both playing teams get +1 point; team that came from rest stays on streak
+      stats[match.team1].points += 1;
+      stats[match.team2].points += 1;
       const stayingTeam = match.cameFromRestTeam;
       const leavingTeam = match.team1 === stayingTeam ? match.team2 : match.team1;
       stats[stayingTeam].currentStreak += 1;
@@ -186,9 +189,9 @@ export function computeCurrentFromHistory(
 
 export function computeStatsFromHistory(matches: Match[]): Record<TeamId, TeamStats> {
   const stats: Record<TeamId, TeamStats> = {
-    white: { wins: 0, currentStreak: 0, longestStreak: 0 },
-    black: { wins: 0, currentStreak: 0, longestStreak: 0 },
-    rainbow: { wins: 0, currentStreak: 0, longestStreak: 0 },
+    white: { wins: 0, currentStreak: 0, longestStreak: 0, points: 0 },
+    black: { wins: 0, currentStreak: 0, longestStreak: 0, points: 0 },
+    rainbow: { wins: 0, currentStreak: 0, longestStreak: 0, points: 0 },
   };
 
   const completedMatches = matches.filter((m) => m.result !== null);
@@ -200,13 +203,16 @@ export function computeStatsFromHistory(matches: Match[]): Record<TeamId, TeamSt
 
     if (winnerTeam) {
       stats[winnerTeam].wins += 1;
+      stats[winnerTeam].points += 3;
       stats[winnerTeam].currentStreak += 1;
       if (stats[winnerTeam].currentStreak > stats[winnerTeam].longestStreak) {
         stats[winnerTeam].longestStreak = stats[winnerTeam].currentStreak;
       }
       if (loserTeam) stats[loserTeam].currentStreak = 0;
     } else {
-      // Draw
+      // Draw: both playing teams get +1 point
+      stats[match.team1].points += 1;
+      stats[match.team2].points += 1;
       const stayingTeam = match.cameFromRestTeam;
       const leavingTeam = match.team1 === stayingTeam ? match.team2 : match.team1;
       stats[stayingTeam].currentStreak += 1;

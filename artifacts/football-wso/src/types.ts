@@ -10,6 +10,7 @@ export interface TeamStats {
   wins: number;
   currentStreak: number;
   longestStreak: number;
+  points: number;
 }
 
 export type MatchResult = "team1" | "team2" | "draw";

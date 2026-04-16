@@ -487,6 +487,7 @@ export default function LiveMatch() {
                 </div>
                 <p className="text-xl font-black">{stats[t].wins}</p>
                 <p className="text-xs text-gray-500">wins</p>
+                <p className="text-sm font-bold text-blue-300 mt-0.5">{stats[t].points}pts</p>
                 {stats[t].currentStreak > 0 && (
                   <p className="text-xs text-orange-400 font-semibold mt-0.5">🔥{stats[t].currentStreak}</p>
                 )}
