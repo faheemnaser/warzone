@@ -1,7 +1,0 @@
-{
-  "buildCommand": "pnpm --filter @workspace/football-wso run build",
-  "outputDirectory": "artifacts/football-wso/dist",
-  "rewrites": [
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
-  ]
-}
