@@ -1,13 +1,7 @@
 {
-  "buildCommand": "pnpm --filter @workspace/football-wso run build",
+  "buildCommand": "PORT=3000 BASE_PATH=/ pnpm --filter @workspace/football-wso run build",
   "outputDirectory": "artifacts/football-wso/dist/public",
   "rewrites": [
-    { "source": "/api/:path*", "destination": "/api/:path*" },
-    { "source": "/(.*)", "destination": "/index.html" }
-  ],
-  "functions": {
-    "api/index.js": {
-      "maxDuration": 10
-    }
-  }
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ]
 }
