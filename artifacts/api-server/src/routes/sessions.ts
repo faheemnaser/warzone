@@ -1,39 +1,17 @@
 import { Router } from "express";
-import Database from "@replit/database";
-
-const db = new Database();
-const SESSION_IDS_KEY = "wso_session_ids";
-
-function sessionKey(id: string) {
-  return `wso_session:${id}`;
-}
-
-async function dbGet<T>(key: string): Promise<T | null> {
-  const result = await db.get(key);
-  if (!result.ok) return null;
-  return (result as { ok: true; value: T | null }).value ?? null;
-}
-
-async function dbSet(key: string, value: unknown): Promise<void> {
-  await db.set(key, value);
-}
-
-async function dbDelete(key: string): Promise<void> {
-  await db.delete(key);
-}
-
-async function getSessionIds(): Promise<string[]> {
-  const val = await dbGet<string[]>(SESSION_IDS_KEY);
-  return Array.isArray(val) ? val : [];
-}
+import { supabase } from "../lib/supabase";
 
 const router = Router();
 
 router.get("/sessions", async (req, res) => {
   try {
-    const ids = await getSessionIds();
-    const sessions = await Promise.all(ids.map((id) => dbGet(sessionKey(id))));
-    res.json(sessions.filter(Boolean));
+    const { data, error } = await supabase
+      .from("sessions")
+      .select("data")
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+    res.json((data ?? []).map((row) => row.data));
   } catch (err) {
     req.log.error({ err }, "Failed to list sessions");
     res.status(500).json({ error: "Failed to list sessions" });
@@ -47,12 +25,11 @@ router.post("/sessions", async (req, res) => {
       res.status(400).json({ error: "Session must have an id" });
       return;
     }
-    await dbSet(sessionKey(session.id), session);
-    const ids = await getSessionIds();
-    if (!ids.includes(session.id)) {
-      ids.push(session.id);
-      await dbSet(SESSION_IDS_KEY, ids);
-    }
+    const { error } = await supabase
+      .from("sessions")
+      .upsert({ id: session.id, data: session }, { onConflict: "id" });
+
+    if (error) throw error;
     res.status(201).json(session);
   } catch (err) {
     req.log.error({ err }, "Failed to create session");
@@ -62,12 +39,17 @@ router.post("/sessions", async (req, res) => {
 
 router.get("/sessions/:id", async (req, res) => {
   try {
-    const session = await dbGet(sessionKey(req.params.id));
-    if (!session) {
+    const { data, error } = await supabase
+      .from("sessions")
+      .select("data")
+      .eq("id", req.params.id)
+      .single();
+
+    if (error || !data) {
       res.status(404).json({ error: "Session not found" });
       return;
     }
-    res.json(session);
+    res.json(data.data);
   } catch (err) {
     req.log.error({ err }, "Failed to get session");
     res.status(500).json({ error: "Failed to get session" });
@@ -81,12 +63,11 @@ router.put("/sessions/:id", async (req, res) => {
       res.status(400).json({ error: "Session id mismatch" });
       return;
     }
-    await dbSet(sessionKey(session.id), session);
-    const ids = await getSessionIds();
-    if (!ids.includes(session.id)) {
-      ids.push(session.id);
-      await dbSet(SESSION_IDS_KEY, ids);
-    }
+    const { error } = await supabase
+      .from("sessions")
+      .upsert({ id: session.id, data: session }, { onConflict: "id" });
+
+    if (error) throw error;
     res.json(session);
   } catch (err) {
     req.log.error({ err }, "Failed to update session");
@@ -96,10 +77,12 @@ router.put("/sessions/:id", async (req, res) => {
 
 router.delete("/sessions/:id", async (req, res) => {
   try {
-    await dbDelete(sessionKey(req.params.id));
-    const ids = await getSessionIds();
-    const filtered = ids.filter((id) => id !== req.params.id);
-    await dbSet(SESSION_IDS_KEY, filtered);
+    const { error } = await supabase
+      .from("sessions")
+      .delete()
+      .eq("id", req.params.id);
+
+    if (error) throw error;
     res.json({ ok: true });
   } catch (err) {
     req.log.error({ err }, "Failed to delete session");
