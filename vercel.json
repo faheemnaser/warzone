@@ -1,7 +1,3 @@
 {
-  "buildCommand": "pnpm --filter @workspace/football-wso run build",
-  "outputDirectory": "artifacts/football-wso/dist/public",
-  "rewrites": [
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
-  ]
+  "comment": "Vercel Root Directory should be set to: artifacts/football-wso — see artifacts/football-wso/vercel.json"
 }
