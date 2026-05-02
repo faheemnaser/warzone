@@ -19,7 +19,7 @@ run = "pnpm --filter @workspace/football-wso run dev"
 
 [services.production]
 build = [ "pnpm", "--filter", "@workspace/football-wso", "run", "build" ]
-publicDir = "artifacts/football-wso/dist/public"
+publicDir = "artifacts/football-wso/dist"
 serve = "static"
 
 [[services.production.rewrites]]
