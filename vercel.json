@@ -1,24 +1,7 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "artifacts/football-wso/package.json",
-      "use": "@vercel/static-build",
-      "config": { "distDir": "dist/public" }
-    },
-    {
-      "src": "api/sessions/index.ts",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "api/sessions/[id].ts",
-      "use": "@vercel/node"
-    }
-  ],
-  "routes": [
-    { "src": "/api/sessions/(.+)", "dest": "/api/sessions/[id].ts" },
-    { "src": "/api/sessions", "dest": "/api/sessions/index.ts" },
-    { "handle": "filesystem" },
-    { "src": "/(.*)", "dest": "/" }
+  "buildCommand": "pnpm --filter @workspace/football-wso run build",
+  "outputDirectory": "artifacts/football-wso/dist/public",
+  "rewrites": [
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
