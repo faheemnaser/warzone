@@ -36,7 +36,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       res.end(JSON.stringify({ error: error.message }));
       return;
     }
-    res.end(JSON.stringify((data ?? []).map((row) => row.data)));
+    res.end(JSON.stringify((data ?? []).map((row: any) => row.data)));
     return;
   }
 
