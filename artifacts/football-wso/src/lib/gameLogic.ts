@@ -61,16 +61,18 @@ export function deriveStateFromMatches(
       }
       if (loserTeam) stats[loserTeam].currentStreak = 0;
     } else {
-      // Draw: both playing teams get +1 point; team that came from rest stays on streak
+      // Draw: both playing teams get +1 point; team that was selected to stay gets +1 streak
       stats[match.team1].points += 1;
       stats[match.team2].points += 1;
-      const stayingTeam = match.cameFromRestTeam;
-      const leavingTeam = match.team1 === stayingTeam ? match.team2 : match.team1;
-      stats[stayingTeam].currentStreak += 1;
-      if (stats[stayingTeam].currentStreak > stats[stayingTeam].longestStreak) {
-        stats[stayingTeam].longestStreak = stats[stayingTeam].currentStreak;
+      const stayingTeam = match.drawStayingTeam;
+      if (stayingTeam) {
+        const leavingTeam = match.team1 === stayingTeam ? match.team2 : match.team1;
+        stats[stayingTeam].currentStreak += 1;
+        if (stats[stayingTeam].currentStreak > stats[stayingTeam].longestStreak) {
+          stats[stayingTeam].longestStreak = stats[stayingTeam].currentStreak;
+        }
+        stats[leavingTeam].currentStreak = 0;
       }
-      stats[leavingTeam].currentStreak = 0;
     }
   }
 
@@ -90,7 +92,7 @@ export function computeNextMatchup(
   prevMatch: Match,
   result: MatchResult
 ): { team1: TeamId; team2: TeamId; restingTeam: TeamId; cameFromRestTeam: TeamId } {
-  const { team1, team2, restingTeam, cameFromRestTeam } = prevMatch;
+  const { team1, team2, restingTeam, drawStayingTeam } = prevMatch;
 
   if (result === "team1") {
     // team1 wins, stays; team2 goes to rest; restingTeam comes in
@@ -109,14 +111,23 @@ export function computeNextMatchup(
       cameFromRestTeam: restingTeam,
     };
   } else {
-    // Draw: team that came from rest stays; the other goes to rest; restingTeam comes in
-    const stayingTeam = cameFromRestTeam;
-    const leavingTeam = team1 === stayingTeam ? team2 : team1;
+    // Draw: use drawStayingTeam to determine who stays; the other goes to rest; restingTeam comes in
+    if (drawStayingTeam) {
+      const stayingTeam = drawStayingTeam;
+      const leavingTeam = team1 === stayingTeam ? team2 : team1;
+      return {
+        team1: stayingTeam,
+        team2: restingTeam,
+        restingTeam: leavingTeam,
+        cameFromRestTeam: restingTeam,
+      };
+    }
+    // Fallback (should not happen if draw is properly recorded)
     return {
-      team1: stayingTeam,
-      team2: restingTeam,
-      restingTeam: leavingTeam,
-      cameFromRestTeam: restingTeam,
+      team1: team1,
+      team2: team2,
+      restingTeam: restingTeam,
+      cameFromRestTeam: team1,
     };
   }
 }
@@ -210,16 +221,18 @@ export function computeStatsFromHistory(matches: Match[]): Record<TeamId, TeamSt
       }
       if (loserTeam) stats[loserTeam].currentStreak = 0;
     } else {
-      // Draw: both playing teams get +1 point
+      // Draw: both playing teams get +1 point; team that was selected to stay gets +1 streak
       stats[match.team1].points += 1;
       stats[match.team2].points += 1;
-      const stayingTeam = match.cameFromRestTeam;
-      const leavingTeam = match.team1 === stayingTeam ? match.team2 : match.team1;
-      stats[stayingTeam].currentStreak += 1;
-      if (stats[stayingTeam].currentStreak > stats[stayingTeam].longestStreak) {
-        stats[stayingTeam].longestStreak = stats[stayingTeam].currentStreak;
+      const stayingTeam = match.drawStayingTeam;
+      if (stayingTeam) {
+        const leavingTeam = match.team1 === stayingTeam ? match.team2 : match.team1;
+        stats[stayingTeam].currentStreak += 1;
+        if (stats[stayingTeam].currentStreak > stats[stayingTeam].longestStreak) {
+          stats[stayingTeam].longestStreak = stats[stayingTeam].currentStreak;
+        }
+        stats[leavingTeam].currentStreak = 0;
       }
-      stats[leavingTeam].currentStreak = 0;
     }
   }
 
