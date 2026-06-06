@@ -319,11 +319,11 @@ export default function LiveMatch() {
       const team2Streak = stats[current.team2].currentStreak;
 
       if (team1Streak > 0) {
-        // Team 1 has streak, so Team 2 rests (Team 1 stays)
-        await recordResultWithDraw(current.team1);
-      } else if (team2Streak > 0) {
-        // Team 2 has streak, so Team 1 rests (Team 2 stays)
+        // Team 1 has streak, so Team 1 RESTS (Team 2 stays)
         await recordResultWithDraw(current.team2);
+      } else if (team2Streak > 0) {
+        // Team 2 has streak, so Team 2 RESTS (Team 1 stays)
+        await recordResultWithDraw(current.team1);
       } else {
         // Both have streak = 0, show modal for manual selection
         setDrawSelectionModal({ team1: current.team1, team2: current.team2 });
@@ -399,11 +399,11 @@ export default function LiveMatch() {
         const team2Streak = stats[match.team2].currentStreak;
 
         if (team1Streak > 0) {
-          // Team 1 has streak, so Team 1 stays
-          await handleEditDrawResult(matchId, match.team1);
-        } else if (team2Streak > 0) {
-          // Team 2 has streak, so Team 2 stays
+          // Team 1 has streak, so Team 1 RESTS (Team 2 stays)
           await handleEditDrawResult(matchId, match.team2);
+        } else if (team2Streak > 0) {
+          // Team 2 has streak, so Team 2 RESTS (Team 1 stays)
+          await handleEditDrawResult(matchId, match.team1);
         } else {
           // Both have streak = 0, show modal for manual selection
           setDrawSelectionModal({ team1: match.team1, team2: match.team2 });
