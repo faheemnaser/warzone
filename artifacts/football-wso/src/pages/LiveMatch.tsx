@@ -250,9 +250,10 @@ export default function LiveMatch() {
 
   async function persistSession(updated: Session) {
     savingRef.current = true;
-    setSession(updated);
     try {
       await saveSession(updated);
+      // Only update UI after save completes successfully
+      setSession(updated);
     } finally {
       savingRef.current = false;
     }
