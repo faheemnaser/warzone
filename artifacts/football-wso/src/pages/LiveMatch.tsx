@@ -103,6 +103,61 @@ function HistoryItem({ match, onEdit, onDelete }: HistoryItemProps) {
   );
 }
 
+interface DrawSelectionModalProps {
+  team1: TeamId;
+  team2: TeamId;
+  onSelect: (stayingTeam: TeamId) => void;
+  onCancel: () => void;
+}
+
+function DrawSelectionModal({ team1, team2, onSelect, onCancel }: DrawSelectionModalProps) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 max-w-sm mx-4">
+        <h2 className="text-xl font-bold text-white mb-2">Draw Match</h2>
+        <p className="text-sm text-gray-400 mb-6">Which team stays on?</p>
+        
+        <div className="space-y-3">
+          <button
+            onClick={() => onSelect(team1)}
+            className={cn(
+              "w-full rounded-xl py-4 font-bold text-lg transition-all active:scale-95",
+              team1 === "white"
+                ? "bg-white text-gray-900 hover:bg-gray-100"
+                : team1 === "black"
+                ? "bg-gray-800 text-white hover:bg-gray-700"
+                : "bg-gradient-to-r from-violet-500 via-fuchsia-500 to-orange-400 text-white hover:opacity-90"
+            )}
+          >
+            {TEAM_NAMES[team1]} Stays
+          </button>
+          
+          <button
+            onClick={() => onSelect(team2)}
+            className={cn(
+              "w-full rounded-xl py-4 font-bold text-lg transition-all active:scale-95",
+              team2 === "white"
+                ? "bg-white text-gray-900 hover:bg-gray-100"
+                : team2 === "black"
+                ? "bg-gray-800 text-white hover:bg-gray-700"
+                : "bg-gradient-to-r from-violet-500 via-fuchsia-500 to-orange-400 text-white hover:opacity-90"
+            )}
+          >
+            {TEAM_NAMES[team2]} Stays
+          </button>
+          
+          <button
+            onClick={onCancel}
+            className="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl py-3 font-medium transition-all mt-4"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function LiveMatch() {
   const params = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
@@ -111,6 +166,11 @@ export default function LiveMatch() {
   const [timerRunning, setTimerRunning] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
+  const [drawSelectionModal, setDrawSelectionModal] = useState<{ team1: TeamId; team2: TeamId } | null>(null);
+  const [pendingDrawResult, setPendingDrawResult] = useState<{ matchId: string | null; isEdit: boolean }>({
+    matchId: null,
+    isEdit: false,
+  });
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioRef = useRef<AudioContext | null>(null);
@@ -198,7 +258,65 @@ export default function LiveMatch() {
     }
   }
 
+  async function recordResultWithDraw(stayingTeam: TeamId) {
+    if (!session || !session.startingTeam1 || !session.startingTeam2) return;
+
+    const result: MatchResult = "draw";
+    const completedMatches = session.matches.filter((m) => m.result !== null);
+    const current = computeCurrentFromHistory(completedMatches, session.startingTeam1, session.startingTeam2);
+    const pendingMatch = session.matches.find((m) => m.result === null);
+
+    let updatedMatches: Match[];
+    if (pendingMatch) {
+      updatedMatches = session.matches.map((m) =>
+        m.id === pendingMatch.id ? { ...m, result, drawStayingTeam: stayingTeam } : m
+      );
+    } else {
+      const newMatch: Match = {
+        id: generateId(),
+        matchNumber: current.matchNumber,
+        team1: current.team1,
+        team2: current.team2,
+        restingTeam: current.restingTeam,
+        result,
+        cameFromRestTeam: current.cameFromRestTeam,
+        drawStayingTeam: stayingTeam,
+      };
+      updatedMatches = [...session.matches, newMatch];
+    }
+
+    const lastCompleted = updatedMatches.filter((m) => m.result !== null);
+    const nextCurrentMatch = computeCurrentFromHistory(lastCompleted, session.startingTeam1, session.startingTeam2);
+
+    const nextPending: Match = {
+      id: generateId(),
+      matchNumber: nextCurrentMatch.matchNumber,
+      team1: nextCurrentMatch.team1,
+      team2: nextCurrentMatch.team2,
+      restingTeam: nextCurrentMatch.restingTeam,
+      result: null,
+      cameFromRestTeam: nextCurrentMatch.cameFromRestTeam,
+    };
+
+    const finalMatches = [...updatedMatches, nextPending];
+    const updated: Session = { ...session, matches: finalMatches };
+    await persistSession(updated);
+    resetTimer();
+    setFlash("Draw!");
+    setTimeout(() => setFlash(null), 2000);
+    setDrawSelectionModal(null);
+  }
+
   async function recordResult(result: MatchResult) {
+    if (result === "draw") {
+      if (!session || !session.startingTeam1 || !session.startingTeam2) return;
+      const completedMatches = session.matches.filter((m) => m.result !== null);
+      const current = computeCurrentFromHistory(completedMatches, session.startingTeam1, session.startingTeam2);
+      setDrawSelectionModal({ team1: current.team1, team2: current.team2 });
+      setPendingDrawResult({ matchId: null, isEdit: false });
+      return;
+    }
+
     if (!session || !session.startingTeam1 || !session.startingTeam2) return;
 
     const completedMatches = session.matches.filter((m) => m.result !== null);
@@ -246,12 +364,22 @@ export default function LiveMatch() {
       : result === "team2"
       ? lastCompleted[lastCompleted.length - 1]?.team2
       : null;
-    setFlash(result === "draw" ? "Draw!" : `${TEAM_NAMES[(winningTeam ?? "white") as TeamId]} Wins!`);
+    setFlash(`${TEAM_NAMES[(winningTeam ?? "white") as TeamId]} Wins!`);
     setTimeout(() => setFlash(null), 2000);
   }
 
   async function handleEditResult(matchId: string, newResult: MatchResult) {
     if (!session || !session.startingTeam1 || !session.startingTeam2) return;
+
+    if (newResult === "draw") {
+      const match = session.matches.find((m) => m.id === matchId);
+      if (match) {
+        setDrawSelectionModal({ team1: match.team1, team2: match.team2 });
+        setPendingDrawResult({ matchId, isEdit: true });
+      }
+      return;
+    }
+
     const withNewResult = session.matches.map((m) =>
       m.id === matchId ? { ...m, result: newResult } : m
     );
@@ -272,6 +400,32 @@ export default function LiveMatch() {
     const finalMatches = [...recomputed, pendingMatch];
     const updated: Session = { ...session, matches: finalMatches };
     await persistSession(updated);
+  }
+
+  async function handleEditDrawResult(matchId: string, stayingTeam: TeamId) {
+    if (!session || !session.startingTeam1 || !session.startingTeam2) return;
+
+    const withNewResult = session.matches.map((m) =>
+      m.id === matchId ? { ...m, result: "draw", drawStayingTeam: stayingTeam } : m
+    );
+    const completedOnly = withNewResult.filter((m) => m.result !== null);
+    const recomputed = recomputeAllMatchesFromHistory(completedOnly, session.startingTeam1, session.startingTeam2);
+
+    const nextCurrent = computeCurrentFromHistory(recomputed, session.startingTeam1, session.startingTeam2);
+    const pendingMatch: Match = {
+      id: generateId(),
+      matchNumber: nextCurrent.matchNumber,
+      team1: nextCurrent.team1,
+      team2: nextCurrent.team2,
+      restingTeam: nextCurrent.restingTeam,
+      result: null,
+      cameFromRestTeam: nextCurrent.cameFromRestTeam,
+    };
+
+    const finalMatches = [...recomputed, pendingMatch];
+    const updated: Session = { ...session, matches: finalMatches };
+    await persistSession(updated);
+    setDrawSelectionModal(null);
   }
 
   async function handleDeleteMatch(matchId: string) {
@@ -325,6 +479,25 @@ export default function LiveMatch() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white relative overflow-x-hidden">
+      {/* Draw Selection Modal */}
+      {drawSelectionModal && (
+        <DrawSelectionModal
+          team1={drawSelectionModal.team1}
+          team2={drawSelectionModal.team2}
+          onSelect={(stayingTeam) => {
+            if (pendingDrawResult.isEdit && pendingDrawResult.matchId) {
+              handleEditDrawResult(pendingDrawResult.matchId, stayingTeam);
+            } else {
+              recordResultWithDraw(stayingTeam);
+            }
+          }}
+          onCancel={() => {
+            setDrawSelectionModal(null);
+            setPendingDrawResult({ matchId: null, isEdit: false });
+          }}
+        />
+      )}
+
       {/* Flash overlay */}
       {flash && (
         <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
