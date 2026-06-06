@@ -312,8 +312,23 @@ export default function LiveMatch() {
       if (!session || !session.startingTeam1 || !session.startingTeam2) return;
       const completedMatches = session.matches.filter((m) => m.result !== null);
       const current = computeCurrentFromHistory(completedMatches, session.startingTeam1, session.startingTeam2);
-      setDrawSelectionModal({ team1: current.team1, team2: current.team2 });
-      setPendingDrawResult({ matchId: null, isEdit: false });
+      const stats = computeStatsFromHistory(completedMatches);
+
+      // Check if either team has streak > 0
+      const team1Streak = stats[current.team1].currentStreak;
+      const team2Streak = stats[current.team2].currentStreak;
+
+      if (team1Streak > 0) {
+        // Team 1 has streak, so Team 2 rests (Team 1 stays)
+        await recordResultWithDraw(current.team1);
+      } else if (team2Streak > 0) {
+        // Team 2 has streak, so Team 1 rests (Team 2 stays)
+        await recordResultWithDraw(current.team2);
+      } else {
+        // Both have streak = 0, show modal for manual selection
+        setDrawSelectionModal({ team1: current.team1, team2: current.team2 });
+        setPendingDrawResult({ matchId: null, isEdit: false });
+      }
       return;
     }
 
@@ -374,8 +389,26 @@ export default function LiveMatch() {
     if (newResult === "draw") {
       const match = session.matches.find((m) => m.id === matchId);
       if (match) {
-        setDrawSelectionModal({ team1: match.team1, team2: match.team2 });
-        setPendingDrawResult({ matchId, isEdit: true });
+        const withNewResult = session.matches.map((m) =>
+          m.id === matchId ? { ...m, result: newResult } : m
+        );
+        const completedOnly = withNewResult.filter((m) => m.result !== null);
+        const stats = computeStatsFromHistory(completedOnly);
+
+        const team1Streak = stats[match.team1].currentStreak;
+        const team2Streak = stats[match.team2].currentStreak;
+
+        if (team1Streak > 0) {
+          // Team 1 has streak, so Team 1 stays
+          await handleEditDrawResult(matchId, match.team1);
+        } else if (team2Streak > 0) {
+          // Team 2 has streak, so Team 2 stays
+          await handleEditDrawResult(matchId, match.team2);
+        } else {
+          // Both have streak = 0, show modal for manual selection
+          setDrawSelectionModal({ team1: match.team1, team2: match.team2 });
+          setPendingDrawResult({ matchId, isEdit: true });
+        }
       }
       return;
     }
