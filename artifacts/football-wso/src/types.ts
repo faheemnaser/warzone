@@ -23,6 +23,7 @@ export interface Match {
   restingTeam: TeamId;
   result: MatchResult | null;
   cameFromRestTeam: TeamId;
+  drawStayingTeam?: TeamId; // Which team stayed on during a draw (set when result is "draw")
 }
 
 export interface Session {
